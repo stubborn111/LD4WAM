@@ -45,7 +45,7 @@ path.
 ### Data
 
 The loader reads LeRobot v3 datasets. By default, datasets are expected under
-the top-level `data/` directory, next to `LDM/`; set `LDM_DATA_ROOT` to use
+the top-level `data/` directory; set `LDM_DATA_ROOT` to use
 another root. Dataset names, roots, camera keys, and action keys are defined in
 `LDM/configs/config.py`.
 
