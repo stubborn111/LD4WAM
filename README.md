@@ -18,7 +18,7 @@ LD4WAM learns motion-aligned latent dynamics from unified human and robot data. 
 
 ## Latent Dynamics Model (LDM)
 
-LDM encodes video clips with a frozen DINOv3 ViT-L/16 and models temporal
+LDM encodes video clips with a frozen DINOv3 and models temporal
 changes with a spatio-temporal transformer. Each transition is represented by
 16 soft-quantized tokens of 32 dimensions, forming a 512-dimensional latent
 dynamics representation. The training objective combines semantic feature
