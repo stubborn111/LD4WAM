@@ -1,7 +1,7 @@
 # LD4WAM: Learning Latent Dynamics from Human Videos for World Action Models
 
 <p align="center">
-  <a href="https://arxiv.org/abs/XXXX.XXXXX"><img src="https://img.shields.io/badge/arXiv-placeholder-b31b1b?logo=arxiv&logoColor=white" alt="arXiv"></a>
+  <a href="https://arxiv.org/abs/2608.22403"><img src="https://img.shields.io/badge/arXiv-placeholder-b31b1b?logo=arxiv&logoColor=white" alt="arXiv"></a>
   <a href="https://stubborn111.github.io/LD4WAM/"><img src="https://img.shields.io/badge/Project%20Page-online-2563eb?logo=googlechrome&logoColor=white" alt="Project Page"></a>
   <a href="Assets/LD4WAM.pdf"><img src="https://img.shields.io/badge/Paper-PDF-dc2626?logo=adobeacrobatreader&logoColor=white" alt="Paper PDF"></a>
 </p>
@@ -115,5 +115,13 @@ This project is built upon [ViPRA](https://github.com/sroutray/vipra). We thank 
 If you find LD4WAM useful, please consider citing:
 
 ```bibtex
-
+@misc{shen2026ld4wamlearninglatentdynamics,
+      title={LD4WAM: Learning Latent Dynamics from Human Videos for World Action Models}, 
+      author={Zhenhao Shen and Jiaqi Liang and Jasper Lu and Feng Jiang and Yuran Wang and Chuanbo Wei and Jiayi Liu and Jianchun Yang and Qize Yu and Jiadi You and Ce Hao and Guanqi He and Chen Xie and Ruihai Wu},
+      year={2026},
+      eprint={2608.22403},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2608.22403}, 
+}
 ```
