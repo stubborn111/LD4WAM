@@ -1,0 +1,199 @@
+"""Schedule generator composing two backbone-owned schedulers.
+
+This module knows nothing about flow-matching math or specific backbone
+formulas. It receives two scheduler references (video and action,
+typically pulled from the architecture) and asks each to produce its own
+timestep series via the duck-typed minimum interface:
+
+    scheduler.set_timesteps(num_inference_steps, shift=...)
+    scheduler.timesteps    # 1-D tensor / array
+
+``schedule_sync`` returns a list of ``(t_video, t_action)`` pairs
+describing the per-iteration noise levels for the joint denoising loop,
+terminated with a ``(0.0, 0.0)`` sentinel.
+
+Two strategies are supported:
+
+- ``sync``           — both streams advance in lockstep on their own
+  deterministic timestep series (default; unchanged behavior).
+- ``variance_shift`` — Latent-Forcing-style ordered trajectory: one
+  stream denoises earlier than the other along an alpha-shift curve
+  (``alpha``, arXiv:2602.11401), with ``lead`` choosing which stream
+  leads. Each stream rides its own ``alpha_shift`` grid (matching
+  training), and ``alpha=1`` reproduces ``sync`` bit-for-bit.
+
+The removed strategies (video_leading / cascade / action_only) live in
+git history; ``make_schedule`` raises ``NotImplementedError`` for them.
+"""
+
+from __future__ import annotations
+
+from typing import List, Tuple
+
+import torch
+
+Schedule = List[Tuple[float, float]]
+
+
+def schedule_sync(
+    video_scheduler,
+    action_scheduler,
+    num_steps: int = 50,
+    shift: float = 5.0,
+    *,
+    shift_video: float = None,
+) -> Schedule:
+    """Both streams advance in lockstep on their own timestep series.
+
+    ``shift_video`` (when set, typically from ``arch.video_backbone.shift_video``)
+    overrides the video scheduler's α-shift independently of the action
+    scheduler. Action always uses ``shift`` — by design, since the
+    Reconstruction-or-Semantics recipe (arXiv:2605.06388) applies
+    dim-dependent shift to non-VAE video encoders only. The model was
+    trained on independent ``(sigma_v, sigma_a)`` samples (independent
+    randint per stream in ``compute_loss``), so any per-stream shift
+    combination is in-distribution.
+    """
+    sv = shift if shift_video is None else shift_video
+    video_scheduler.set_timesteps(num_steps, shift=sv)
+    action_scheduler.set_timesteps(num_steps, shift=shift)
+    v_ts = video_scheduler.timesteps.tolist()
+    a_ts = action_scheduler.timesteps.tolist()
+    return [(v, a) for v, a in zip(v_ts, a_ts)] + [(0.0, 0.0)]
+
+
+def _alpha_shift(u, shift: float):
+    """alpha-shift ``u`` (float or tensor) in [0, 1] into a shifted sigma.
+
+    ``f_alpha(u) = shift*u / (1 + (shift - 1)*u)`` -- the time shift that
+    is informationally equivalent to scaling the latent variance by
+    ``shift`` (Esser et al. 2024, SD3; Latent Forcing arXiv:2602.11401
+    Eq. 4). Same closed form, same operation order as the backbone
+    schedulers' ``set_timesteps``, so float32 tensor input reproduces
+    their grids bit-for-bit.
+    """
+    return shift * u / (1.0 + (shift - 1.0) * u)
+
+
+def schedule_variance_shift(
+    video_scheduler,
+    action_scheduler,
+    num_steps: int = 50,
+    *,
+    lead: str = "video",
+    alpha: float = 9.0,
+    shift_video: float = 5.0,
+    shift_action: float = 5.0,
+) -> Schedule:
+    """Latent-Forcing-style ordered schedule: one stream denoises earlier.
+
+    Both streams share a global progress ``u = k / num_steps``. The **lead**
+    stream takes cleanness ``f_alpha(u) >= u`` (Latent Forcing arXiv:2602.11401
+    Eq. 4) so it reaches "clean" earlier; the **lag** stream takes ``u``. Each
+    stream's sigma is ``alpha_shift(1 - cleanness, shift_stream)`` -- the SAME
+    grid the backbone applies at training time (``set_timesteps_wan`` /
+    ``ActionScheduler.set_timesteps``). A variance_shift-trained checkpoint and
+    this schedule therefore stay point-wise in-distribution.
+
+    Computed in float32 on the schedulers' own base grid
+    (``linspace(1, 0, n+1)[:-1]``), with the lead curve applied as the
+    algebraically identical ``1 - f_alpha(1 - s) == f_{1/alpha}(s)`` -- exact
+    at ``alpha=1`` in floating point -- so ``alpha=1`` reproduces
+    ``schedule_sync`` bit-for-bit.
+
+    Sigma is monotonically decreasing and the schedule ends with the
+    ``(0.0, 0.0)`` sentinel -- consumed by ``BaseWAMArchitecture.generate``
+    exactly like ``sync`` (every supported architecture, unchanged).
+
+    Args:
+        video_scheduler: Video stream's scheduler (only its
+            ``num_train_timesteps`` attribute is read).
+        action_scheduler: Action stream's scheduler (only its
+            ``num_train_timesteps`` attribute is read).
+        num_steps: Number of denoising steps per stream.
+        lead: Which stream denoises earlier -- ``"action"`` or ``"video"``.
+        alpha: Lead-curve strength, must be ``>= 1`` (``>1`` leads; ``1`` = sync diagonal; ``<1`` inverts lead/lag).
+        shift_video: alpha-shift for the video stream's sigma grid.
+        shift_action: alpha-shift for the action stream's sigma grid.
+    """
+    if lead not in ("action", "video"):
+        raise ValueError(f"variance_shift lead must be 'action' or 'video', got {lead!r}.")
+    num_train_v = float(getattr(video_scheduler, "num_train_timesteps", 1000))
+    num_train_a = float(getattr(action_scheduler, "num_train_timesteps", 1000))
+
+    # s[k] = 1 - k/num_steps: the schedulers' float32 base sigma grid.
+    s = torch.linspace(1.0, 0.0, num_steps + 1)[:-1]
+    # Lead pre-shift sigma 1 - f_alpha(1-s) rewritten as f_{1/alpha}(s), which
+    # leaves s bitwise untouched at alpha=1; the lag stream stays on s.
+    lead_sigma = _alpha_shift(s, 1.0 / alpha)
+    if lead == "video":
+        v_sigma, a_sigma = lead_sigma, s
+    else:
+        v_sigma, a_sigma = s, lead_sigma
+    # Each stream's sigma rides its own alpha-shift grid (matches training).
+    v_ts = (_alpha_shift(v_sigma, shift_video) * num_train_v).tolist()
+    a_ts = (_alpha_shift(a_sigma, shift_action) * num_train_a).tolist()
+
+    return [(v, a) for v, a in zip(v_ts, a_ts)] + [(0.0, 0.0)]
+
+
+def make_schedule(
+    strategy: str,
+    video_scheduler,
+    action_scheduler,
+    num_steps: int = 50,
+    shift: float = 5.0,
+    *,
+    shift_video: float = None,
+    lead: str = "video",
+    alpha: float = 9.0,
+) -> Schedule:
+    """Dispatcher kept as the single entry point for building a schedule.
+
+    Args:
+        strategy: ``"sync"`` (deterministic lockstep, default) or
+            ``"variance_shift"`` (Latent-Forcing ordered curve). Any other
+            value raises ``NotImplementedError`` (the removed
+            video_leading/cascade/action_only strategies live in git
+            history).
+        video_scheduler: Video stream's scheduler (e.g.
+            ``architecture.video_scheduler``).
+        action_scheduler: Action stream's scheduler (e.g.
+            ``architecture.action_scheduler``).
+        num_steps: Denoising step count for both streams.
+        shift: Global α-shift; used by the action scheduler always, and by
+            the video scheduler when ``shift_video`` is ``None``.
+        shift_video: Optional override of the video α-shift only. Typically
+            sourced from ``arch.video_backbone.shift_video`` so train and
+            inference sigma grids match.
+        lead: ``variance_shift`` only -- which stream denoises earlier
+            (``"action"`` or ``"video"``).
+        alpha: ``variance_shift`` only -- lead-curve strength (``>1`` leads;
+            ``1`` = diagonal = sync).
+    """
+    if strategy == "sync":
+        return schedule_sync(
+            video_scheduler, action_scheduler, num_steps=num_steps, shift=shift, shift_video=shift_video
+        )
+    if strategy == "variance_shift":
+        return schedule_variance_shift(
+            video_scheduler,
+            action_scheduler,
+            num_steps=num_steps,
+            lead=lead,
+            alpha=alpha,
+            shift_video=shift if shift_video is None else shift_video,
+            shift_action=shift,
+        )
+    raise NotImplementedError(
+        f"schedule_type={strategy!r} is not supported; choose 'sync' or 'variance_shift'. "
+        "independent/video_leading/cascade/action_only live in git history."
+    )
+
+
+__all__ = [
+    "Schedule",
+    "schedule_sync",
+    "schedule_variance_shift",
+    "make_schedule",
+]

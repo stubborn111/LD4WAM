@@ -1,0 +1,13 @@
+# Per-task step_lim overrides for RoboTwin evaluation (evaluation only).
+#
+# Format: <task_name>: <int>
+#
+# - A task listed here overrides RoboTwin's upstream
+#   task_config/_eval_step_limit.yml value for that task.
+# - Tasks not listed keep RoboTwin's value (fallback 1000).
+# - Applied by openwam2robotwin_interface.py at the start of every episode;
+#   restart the eval process after editing.
+# - Leaving the file empty (comments only, as shipped) reproduces stock
+#   RoboTwin behaviour.
+#
+# adjust_bottle: 160

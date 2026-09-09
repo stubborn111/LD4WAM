@@ -1,0 +1,11 @@
+# ActionDiT action backbone (cfg.model.action_backbone.*) for la_tri_system.
+# Geometry auto-resolves from video_backbone (num_layers/video_dim/num_heads/
+# attn_head_dim, hard head parity); dim/ffn_dim are free. Raw context width comes
+# from architecture.text_dim (shared with the video stream) — do NOT set it here.
+# The ActionDiT predicts real actions.
+dim: 1024
+ffn_dim: 4096
+# ACTION scheduler α-shift (symmetric to video shift_video); single source of
+# truth for train + deploy.
+shift_action: 5.0
+

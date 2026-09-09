@@ -1,0 +1,119 @@
+# la_tri_system IDM architecture: video DiT + Latent Action Expert + ActionDiT.
+#
+# Three-expert MoT with FastWAM-IDM two-stage training/inference ("solve action
+# from the predicted video"). The latent-action stream is a learnable-query
+# expert supervised by an offline-precomputed LAM target (masked MSE, NOT flow
+# matching) — see openwam/model/latent_action_backbone/.
+#
+# Framework name is structure-agnostic ("la_tri_system"); IDM is variant `idm`.
+# Future non-IDM structures register as new variants under the same framework.
+#
+# Switch the video backbone via the `video_backbone:` block (default Wan 2.2
+# TI2V-5B), or on CLI (override `name` AND `model_path` together).
+
+# Frozen pretrained components (freeze_modules walks each via get_submodule;
+# missing paths are silently skipped). For the default Wan2.2 TI2V-5B backbone the
+# meaningful ones are the T5 text_encoder and the VAE — keep them frozen so only
+# the video DiT + ActionDiT + latent-action expert train. Without this the ~5.7B
+# T5 text encoder is trained too (wasteful + large memory). The online LAM is
+# frozen and held outside the module tree by the architecture itself.
+freeze:
+  - video_backbone.text_encoder
+  - video_backbone.vae
+  - video_backbone.image_encoder
+  - video_backbone.video_encoder
+
+# latent_action lives UNDER architecture: so resolve_architecture_config
+# forwards it to build-time cfg (action_backbone fields flatten to top level).
+architecture:
+  framework: la_tri_system
+  variant: idm
+
+  # action_dim / state_dim default to 20 (configs/dataloader/robotwin.yaml
+  # action_mode=eef → 20D). For action_mode=joint (14D qpos) override both.
+  action_dim: 20
+  use_proprioception: true
+  state_dim: 20
+
+  # IDM fixes attention_mask_mode='joint' (teacher-forcing / two-stage mask).
+  attention_mask_mode: joint
+  # v->v sub-block: bidirectional | per_frame_causal | first_frame_causal.
+  video_attention_mask_mode: first_frame_causal
+
+  # la -> cond_video attention: full (la reads the whole clean video — natural
+  # IDM setting) | per_frame_causal (la token of latent frame t sees video
+  # frames <= t).
+  la_video_attention_mode: full
+
+  # Probability of noising the cond-video (teacher) branch during training for
+  # IDM robustness (Bernoulli per sample).
+  idm_video_cond_noise_prob: 0.5
+
+  # Wrap the inner mixed [V+la+A] attention in torch.utils.checkpoint.
+  mot_checkpoint_mixed_attn: true
+
+  # 1:1 video-layer participation (MoT driver requires bridge == vb.num_layers).
+  bridge_layers: null
+  bridge_interval: 1
+
+  # Latent Action Expert. num_layers auto-set to vb.num_layers; geometry
+  # (num_heads / head_dim) injected from the video backbone. la_dim MUST equal
+  # the LAM's flattened latent-action dim (code_seq_len * quant_dim = 16*32=512).
+  latent_action:
+    la_dim: 512          # == LAM la_dim (flattened per-transition code)
+    la_hidden_dim: 512   # expert residual hidden width
+    la_ffn_dim: 2048     # expert FFN intermediate
+    # k_la = latent actions PER predicted video latent (mirrors the action
+    # expert's 16 actions/latent). query_base holds k_la shared seeds, reused
+    # across every predicted latent (NOT one distinct seed per token); RoPE
+    # positions distinguish them.
+    k_la: 4
+    eps: 1.0e-6
+    # Total la tokens = (predicted video latents) * k_la. We predict 2 video
+    # latents per step (latent 0 is the conditioning frame, no la), so 2*4 = 8.
+    # (Symmetry: the action expert predicts 2*16 = 32 actions.)
+    num_la_tokens: 8
+
+  # --- Online LAM (latent action model) ---------------------------------------
+  # A FROZEN LAM held by the architecture (like the VAE). At training,
+  # prepare_inputs runs it on the raw obs frames each step to produce the la
+  # supervision target on the fly — no offline precompute. At inference it is
+  # NOT run (the expert predicts la directly). Loaded via a dynamic import from
+  # `repo_path` (the LDM of this repository), so the WDAM package keeps no static
+  # dependency on the LDM code.
+  #
+  # Remove/comment this whole block to fall back to offline la_gt from the
+  # dataloader (the original behavior).
+  latent_action_model:
+    name: laq                                     # registry key (dynamic-import adapter)
+    repo_path: ../LDM                             # the LDM directory of this repository (relative to WDAM/)
+    class_import: ldm.latent_dynamics_model:LDM   # LDM class inside repo_path
+    model_cfg_import: configs.config:MODEL_CFG    # LDM MODEL_CFG (dim/quant_dim/code_seq_len/...)
+    ckpt: /path/to/ldm_model_final.pt             # released LDM checkpoint (see the top-level README)
+    soft_quantize: true                           # continuous soft embeddings (matches training)
+    la_dim: 512                                   # code_seq_len(16) * quant_dim(32); MUST match latent_action.la_dim above
+    # The LDM loads its frozen DINOv3 encoder from $DINOV3_MODEL_PATH
+    # (default LDM/pretrained/dinov3-vitl16-local) — export it before training.
+    # model_cfg: {...}                             # OR inline the MODEL_CFG dict here instead of model_cfg_import
+
+# ActionDiT (shared, idm variant). Geometry auto-resolved from the video
+# backbone; dim/ffn_dim/text_dim are free (residual is narrower, Q/K/V project
+# up to the shared num_heads*head_dim attention space).
+action_backbone:
+  dim: 1024
+  text_dim: 4096
+  ffn_dim: 4096
+
+# Video backbone. Default Wan 2.2 TI2V-5B (dim=3072, heads=24, head_dim=128,
+# layers=30). IDM requires the TI2V separated-timestep / fused-first-frame path
+# for 4D per-token t_mod.
+video_backbone:
+  name: wan22_ti2v_5b
+  model_path: /path/to/Wan2.2-TI2V-5B  # [Required] Path to your own directory
+  from_scratch: false
+  temporal_compression: 4
+  causal_temporal: true
+  shift_video: null
+  encoder:
+    name: wan_vae
+    model_path: /path/to/Wan2.2-TI2V-5B

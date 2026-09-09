@@ -1,0 +1,34 @@
+# --- Base deploy settings ---
+checkpoint_path: null          # Default checkpoint dir; --ckpt-dir overrides
+device: cuda:0
+server:
+  host: "0.0.0.0"
+  port: 8848                   # WebSocket port
+
+# --- Inference (cfg.inference) ---
+# Every field has a same-name CLI override (--denoise-steps, --execution-mode, ...).
+#
+# Window geometry is intentionally NOT set here. `merge_deploy_cfg` (server.py)
+# derives it from the checkpoint's training dataloader when omitted, so each
+# architecture deploys at the geometry it was trained on without editing this
+# shared file:
+#   num_frames        <- dataloader.num_frames            (raw state/action window; actions returned = num_frames-1)
+#   video_num_frames  <- (num_frames-1)//video_stride + 1 (Wan video length after training-time video_stride)
+#   height / width    <- dataloader.height / width
+# e.g. a RoboTwin checkpoint (num_frames=33, video_stride=4)
+# auto-resolves to num_frames=33, video_num_frames=9 (→ latent_action=8 tokens),
+# height=384, width=320. Only set these below to force an override — do NOT
+# hardcode one arch's window here, it would break the others.
+inference:
+  denoise_steps: 10           # Denoising steps (FastWAM-Joint default)
+  schedule_type: sync         # la_tri_system IDM is two-stage (video, then action); keep sync
+
+  execution_mode: sync        # sync | async — Sync/AsyncInferenceExecutor
+  execution_horizon: null     # async only: actions per chunk; null = policy.execute_horizon
+  inference_delay_steps: null # async only: inference latency in steps; null = half horizon
+
+# --- Deploy-time optimizations (cfg.optimization) ---
+optimization:
+  decode_video: false         # false = skip VAE decode, return video=null (actions-only)
+
+
