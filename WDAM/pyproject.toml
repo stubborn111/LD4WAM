@@ -7,7 +7,7 @@ name = "ld4wam"
 version = "0.1.0"
 description = "LD4WAM: latent-action world-action model (video DiT + latent-action expert + action expert) built on the OpenWAM framework"
 authors = [{ name = "LD4WAM Contributors" }]
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=1.24,<3",
@@ -48,7 +48,7 @@ dependencies = [
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
 

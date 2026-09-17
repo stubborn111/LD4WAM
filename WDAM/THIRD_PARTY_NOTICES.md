@@ -5,7 +5,7 @@ license terms apply to the corresponding parts.
 
 | Component | Where | Upstream | License |
 |---|---|---|---|
-| OpenWAM framework (`openwam/` package, training / deployment entrypoints, RoboTwin evaluation client) | `openwam/`, `scripts/`, `benchmarks/` | https://github.com/OpenWAM-Official/OpenWAM | MIT (see `LICENSE`) |
+| OpenWAM framework (`openwam/` package, training / deployment entrypoints, RoboTwin evaluation client) | `openwam/`, `scripts/`, `benchmarks/` | https://github.com/OpenWAM-Official/OpenWAM | Apache-2.0 (see `LICENSE` and `NOTICE`) |
 | Wan2.2 video DiT / VAE implementation | `openwam/model/video_backbone/wan/` | https://github.com/Wan-Video/Wan2.2 | Apache-2.0 |
 | DiffSynth-Studio (Wan pipeline and model code the backbone is adapted from) | `openwam/model/video_backbone/wan/` | https://github.com/modelscope/DiffSynth-Studio | Apache-2.0 |
 | RoboTwin 2.0 benchmark (evaluation interface targets its `eval_policy.py`) | `benchmarks/robotwin/` | https://github.com/RoboTwin-Platform/RoboTwin | MIT |

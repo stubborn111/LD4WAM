@@ -200,7 +200,7 @@ Download a checkpoint directory and pass it as `training.finetune_ckpt_path`
 
 ## Acknowledgements
 
-The LDM is built upon [ViPRA](https://github.com/sroutray/vipra). The WDAM code is derived from [OpenWAM](https://github.com/OpenWAM-Official/OpenWAM) (MIT, see [`WDAM/LICENSE`](WDAM/LICENSE)); its Wan video backbone derives from [Wan2.2](https://github.com/Wan-Video/Wan2.2) and [DiffSynth-Studio](https://github.com/modelscope/DiffSynth-Studio) (Apache-2.0), and evaluation uses [RoboTwin 2.0](https://github.com/RoboTwin-Platform/RoboTwin); see [`WDAM/THIRD_PARTY_NOTICES.md`](WDAM/THIRD_PARTY_NOTICES.md). We thank the authors of these projects for making their work available to the community.
+The LDM is built upon [ViPRA](https://github.com/sroutray/vipra). The WDAM code is derived from [OpenWAM](https://github.com/OpenWAM-Official/OpenWAM) (Apache-2.0, see [`WDAM/LICENSE`](WDAM/LICENSE) and [`WDAM/NOTICE`](WDAM/NOTICE)); its Wan video backbone derives from [Wan2.2](https://github.com/Wan-Video/Wan2.2) and [DiffSynth-Studio](https://github.com/modelscope/DiffSynth-Studio) (Apache-2.0), and evaluation uses [RoboTwin 2.0](https://github.com/RoboTwin-Platform/RoboTwin); see [`WDAM/THIRD_PARTY_NOTICES.md`](WDAM/THIRD_PARTY_NOTICES.md). We thank the authors of these projects for making their work available to the community.
 
 ## Citation
 

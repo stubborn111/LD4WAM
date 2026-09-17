@@ -127,5 +127,5 @@ This codebase is built on [OpenWAM](https://github.com/OpenWAM-Official/OpenWAM)
 the `openwam/` package, the Hydra training / deployment entrypoints and the
 RoboTwin evaluation client come from it, with the LD4WAM architecture added as
 the `la_tri_system` family.
-OpenWAM is MIT-licensed (`LICENSE`); other upstream components are listed in
+OpenWAM is licensed under Apache-2.0 (`LICENSE`, `NOTICE`); other upstream components are listed in
 `THIRD_PARTY_NOTICES.md`.
